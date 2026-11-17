@@ -1,0 +1,43 @@
+name: HizliAktar
+options:
+  bundleIdPrefix: com.ilirya
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+targets:
+  HizliAktar:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Assets.xcassets
+    scheme: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ilirya.hizliaktar
+        PRODUCT_NAME: HizliAktar
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGNING_ALLOWED: "NO"
+        SWIFT_STRICT_CONCURRENCY: minimal
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Hızlı Aktar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSPhotoLibraryUsageDescription: Seçtiğin fotoğrafları orijinal kalitesinde gönderebilmek için fotoğraflarına erişmesi gerekiyor.
+        NSPhotoLibraryAddUsageDescription: Gelen fotoğrafları Fotoğraflar uygulamasına kaydetmek için gerekiyor.
+        NSLocalNetworkUsageDescription: Yakındaki iPhone'unu bulup fotoğrafları doğrudan ona göndermek için gerekiyor.
+        NSBonjourServices:
+          - _hizliaktar._tcp
+        ITSAppUsesNonExemptEncryption: false
