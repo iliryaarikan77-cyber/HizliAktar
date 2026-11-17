@@ -137,7 +137,10 @@ enum AssetKey {
 final class BlockingConnection {
     let conn: NWConnection
     private let queue: DispatchQueue
-    private let inflight = DispatchSemaphore(value: HA.maxInflightSends)
+    // Not: Semafor 0 ile oluşturulup sonra doldurulur. Başlangıç değeri 16 olan bir
+    // semafor, içinde gönderim beklerken serbest bırakılırsa libdispatch uygulamayı
+    // kasıtlı olarak çökertir (bağlantı koptuğunda yaşanan çökme buydu).
+    private let inflight: DispatchSemaphore
     private let lock = NSLock()
     private var _error: Error?
     private var readyContinuation: DispatchSemaphore?
@@ -156,6 +159,8 @@ final class BlockingConnection {
     init(_ conn: NWConnection, label: String) {
         self.conn = conn
         self.queue = DispatchQueue(label: "ha.conn.\(label)", qos: .userInitiated)
+        self.inflight = DispatchSemaphore(value: 0)
+        for _ in 0..<HA.maxInflightSends { inflight.signal() }
     }
 
     /// Bağlantıyı başlatır ve hazır olana kadar bekler.

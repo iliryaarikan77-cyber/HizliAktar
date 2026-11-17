@@ -296,7 +296,7 @@ final class ReceiveEngine {
             let fm = FileManager.default
             while true {
                 let finished: Bool = try autoreleasepool {
-                    let (type, payload) = try c.readFrame(timeout: 180)
+                    let (type, payload) = try c.readFrame(timeout: 1800)   // gönderici iCloud'dan orijinal indirirken uzun süre sessiz kalabilir
                     switch type {
                     case .assetBegin:
                         guard let msg = try? JSONDecoder().decode(AssetBeginMsg.self, from: payload) else { throw ProtoError.badFrame }
