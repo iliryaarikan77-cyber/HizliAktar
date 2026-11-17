@@ -294,47 +294,51 @@ final class ReceiveEngine {
             }
 
             let fm = FileManager.default
-            loop: while true {
-                let (type, payload) = try c.readFrame(timeout: 180)
-                switch type {
-                case .assetBegin:
-                    guard let msg = try? JSONDecoder().decode(AssetBeginMsg.self, from: payload) else { throw ProtoError.badFrame }
-                    let dir = fm.temporaryDirectory.appendingPathComponent("recv-\(UUID().uuidString)", isDirectory: true)
-                    var files: [URL] = []
-                    for (i, r) in msg.resources.enumerated() {
-                        let sub = dir.appendingPathComponent("\(i)", isDirectory: true)
-                        try fm.createDirectory(at: sub, withIntermediateDirectories: true)
-                        let safe = r.filename.replacingOccurrences(of: "/", with: "_")
-                        files.append(sub.appendingPathComponent(safe.isEmpty ? "file" : safe))
+            while true {
+                let finished: Bool = try autoreleasepool {
+                    let (type, payload) = try c.readFrame(timeout: 180)
+                    switch type {
+                    case .assetBegin:
+                        guard let msg = try? JSONDecoder().decode(AssetBeginMsg.self, from: payload) else { throw ProtoError.badFrame }
+                        let dir = fm.temporaryDirectory.appendingPathComponent("recv-\(UUID().uuidString)", isDirectory: true)
+                        var files: [URL] = []
+                        for (i, r) in msg.resources.enumerated() {
+                            let sub = dir.appendingPathComponent("\(i)", isDirectory: true)
+                            try fm.createDirectory(at: sub, withIntermediateDirectories: true)
+                            let safe = r.filename.replacingOccurrences(of: "/", with: "_")
+                            files.append(sub.appendingPathComponent(safe.isEmpty ? "file" : safe))
+                        }
+                        current = (msg, dir, files)
+
+                    case .resourceBegin:
+                        guard let cur = current, let idx = payload.first, Int(idx) < cur.files.count else { throw ProtoError.badFrame }
+                        let url = cur.files[Int(idx)]
+                        fm.createFile(atPath: url.path, contents: nil)
+                        fh = try FileHandle(forWritingTo: url)
+
+                    case .data:
+                        guard let h = fh else { throw ProtoError.badFrame }
+                        try h.write(contentsOf: payload)
+                        s.addBytes(Int64(payload.count))
+
+                    case .resourceEnd:
+                        try fh?.close()
+                        fh = nil
+
+                    case .assetEnd:
+                        guard let cur = current else { throw ProtoError.badFrame }
+                        commits.add(IncomingAsset(msg: cur.msg, dir: cur.dir, files: cur.files, session: s))
+                        current = nil
+
+                    case .done:
+                        return true
+
+                    default:
+                        throw ProtoError.badFrame
                     }
-                    current = (msg, dir, files)
-
-                case .resourceBegin:
-                    guard let cur = current, let idx = payload.first, Int(idx) < cur.files.count else { throw ProtoError.badFrame }
-                    let url = cur.files[Int(idx)]
-                    fm.createFile(atPath: url.path, contents: nil)
-                    fh = try FileHandle(forWritingTo: url)
-
-                case .data:
-                    guard let h = fh else { throw ProtoError.badFrame }
-                    try h.write(contentsOf: payload)
-                    s.addBytes(Int64(payload.count))
-
-                case .resourceEnd:
-                    try fh?.close()
-                    fh = nil
-
-                case .assetEnd:
-                    guard let cur = current else { throw ProtoError.badFrame }
-                    commits.add(IncomingAsset(msg: cur.msg, dir: cur.dir, files: cur.files, session: s))
-                    current = nil
-
-                case .done:
-                    break loop
-
-                default:
-                    throw ProtoError.badFrame
+                    return false
                 }
+                if finished { break }
             }
         } catch {
             // bağlantı koptu; gönderici diğer akışlardan / yeniden bağlanarak devam eder

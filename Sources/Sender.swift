@@ -68,37 +68,39 @@ enum Planner {
         var items: [PlanItem] = []
         items.reserveCapacity(assets.count)
         for (i, asset) in assets.enumerated() {
-            let all = PHAssetResource.assetResources(for: asset)
-            func find(_ t: PHAssetResourceType) -> PHAssetResource? { all.first { $0.type == t } }
+            autoreleasepool {
+                let all = PHAssetResource.assetResources(for: asset)
+                func find(_ t: PHAssetResourceType) -> PHAssetResource? { all.first { $0.type == t } }
 
-            var list: [(PHAssetResource, ResourceKind)] = []
-            switch asset.mediaType {
-            case .image:
-                let editedPhoto = includeEdits ? find(.fullSizePhoto) : nil
-                if let p = editedPhoto ?? find(.photo) { list.append((p, .photo)) }
-                let editedPaired = includeEdits ? find(.fullSizePairedVideo) : nil
-                if let pv = editedPaired ?? find(.pairedVideo) { list.append((pv, .pairedVideo)) }
-                // RAW+JPEG çiftleri: düzenlenmemişse ikinci dosyayı da gönder
-                if editedPhoto == nil, let alt = find(.alternatePhoto) { list.append((alt, .alternatePhoto)) }
-            case .video:
-                let edited = includeEdits ? find(.fullSizeVideo) : nil
-                if let v = edited ?? find(.video) { list.append((v, .video)) }
-            case .audio:
-                if let a = find(.audio) { list.append((a, .audio)) }
-            default:
-                break
-            }
-            if list.isEmpty, let f = all.first {
-                list.append((f, asset.mediaType == .video ? .video : .photo))
-            }
-            guard !list.isEmpty else { continue }
+                var list: [(PHAssetResource, ResourceKind)] = []
+                switch asset.mediaType {
+                case .image:
+                    let editedPhoto = includeEdits ? find(.fullSizePhoto) : nil
+                    if let p = editedPhoto ?? find(.photo) { list.append((p, .photo)) }
+                    let editedPaired = includeEdits ? find(.fullSizePairedVideo) : nil
+                    if let pv = editedPaired ?? find(.pairedVideo) { list.append((pv, .pairedVideo)) }
+                    // RAW+JPEG çiftleri: düzenlenmemişse ikinci dosyayı da gönder
+                    if editedPhoto == nil, let alt = find(.alternatePhoto) { list.append((alt, .alternatePhoto)) }
+                case .video:
+                    let edited = includeEdits ? find(.fullSizeVideo) : nil
+                    if let v = edited ?? find(.video) { list.append((v, .video)) }
+                case .audio:
+                    if let a = find(.audio) { list.append((a, .audio)) }
+                default:
+                    break
+                }
+                if list.isEmpty, let f = all.first {
+                    list.append((f, asset.mediaType == .video ? .video : .photo))
+                }
+                guard !list.isEmpty else { return }
 
-            let original = (find(.photo) ?? find(.video) ?? list[0].0).originalFilename
-            let key = AssetKey.make(filename: original, date: asset.creationDate,
-                                    width: asset.pixelWidth, height: asset.pixelHeight)
-            let est = list.reduce(Int64(0)) { $0 + estimatedSize($1.0) }
-            items.append(PlanItem(index: i, asset: asset, resources: list,
-                                  originalName: original, key: key, estBytes: est))
+                let original = (find(.photo) ?? find(.video) ?? list[0].0).originalFilename
+                let key = AssetKey.make(filename: original, date: asset.creationDate,
+                                        width: asset.pixelWidth, height: asset.pixelHeight)
+                let est = list.reduce(Int64(0)) { $0 + estimatedSize($1.0) }
+                items.append(PlanItem(index: i, asset: asset, resources: list,
+                                      originalName: original, key: key, estBytes: est))
+            }
         }
         return items
     }
@@ -266,7 +268,7 @@ final class SendEngine {
         defer { streamDelta(-1) }
         while let item = nextItem() {
             do {
-                try sendAsset(item, on: c)
+                try autoreleasepool { try sendAsset(item, on: c) }
                 markDone(item)
             } catch {
                 requeue(item)
@@ -340,11 +342,17 @@ final class SendEngine {
             try c.send(encodeFrame(.resourceBegin, Data([UInt8(n)])))
             let fh = try FileHandle(forReadingFrom: url)
             defer { try? fh.close() }
+            // Her parça kendi autoreleasepool'unda: aksi halde okunan veriler
+            // iş parçacığı bitene kadar bellekte birikiyor (büyük aktarımlarda çökme sebebi).
             while true {
                 if cancelled { throw ProtoError.unexpected("İptal") }
-                guard let chunk = try fh.read(upToCount: HA.chunkSize), !chunk.isEmpty else { break }
-                try c.send(encodeFrame(.data, chunk))
-                addSent(Int64(chunk.count))
+                let more: Bool = try autoreleasepool {
+                    guard let chunk = try fh.read(upToCount: HA.chunkSize), !chunk.isEmpty else { return false }
+                    try c.send(encodeFrame(.data, chunk))
+                    addSent(Int64(chunk.count))
+                    return true
+                }
+                if !more { break }
             }
             try c.send(encodeFrame(.resourceEnd))
         }

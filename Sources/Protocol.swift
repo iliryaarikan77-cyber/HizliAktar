@@ -7,7 +7,7 @@ import Photos
 enum HA {
     static let serviceType = "_hizliaktar._tcp"
     static let chunkSize = 1 << 20          // 1 MB veri parçaları
-    static let maxInflightSends = 24        // bağlantı başına uçuştaki parça sayısı
+    static let maxInflightSends = 16        // bağlantı başına uçuştaki parça sayısı
     static let defaultParallel = 4
 
     /// Hem gönderici hem alıcı aynı ayarları kullanır: TCP, eşler arası (AWDL) açık.
