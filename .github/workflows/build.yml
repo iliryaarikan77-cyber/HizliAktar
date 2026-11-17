@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -41,6 +44,16 @@ jobs:
         with:
           name: HizliAktar-ipa
           path: HizliAktar.ipa
+
+      - name: Publish to Releases (direct download link)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "Hızlı Aktar (son sürüm)" \
+              --notes "HizliAktar.ipa dosyasını indirip Sideloadly ile iPhone'a yükle."
+          gh release upload latest HizliAktar.ipa --clobber
 
       - name: Upload build log
         if: always()
